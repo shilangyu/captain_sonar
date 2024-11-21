@@ -68,6 +68,10 @@ impl Map {
         Self { size, obstacles }
     }
 
+    pub const fn contains(&self, coord: Coordinate) -> bool {
+        coord.x < self.size && coord.y < self.size
+    }
+
     pub const fn size(&self) -> u32 {
         self.size
     }
@@ -124,10 +128,10 @@ impl Trace {
     }
 
     pub fn path(&self) -> impl Iterator<Item = Offset> + '_ {
-        self.moves.iter().scan(Offset::ZERO, |s, e| {
+        iter::once(Offset::ZERO).chain(self.moves.iter().scan(Offset::ZERO, |s, e| {
             *s = *s + e.delta();
             Some(*s)
-        })
+        }))
     }
 }
 
@@ -168,7 +172,7 @@ impl Radar {
                         break;
                     };
 
-                    if self.map.obstacles.contains(&coord) {
+                    if self.map.obstacles.contains(&coord) || !self.map.contains(coord) {
                         valid = false;
                         break;
                     }

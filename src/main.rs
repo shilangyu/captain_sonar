@@ -1,6 +1,6 @@
 use captain_sonar::radar::*;
 
-use std::{collections::HashSet, io, iter};
+use std::{collections::HashSet, io};
 
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{buffer::Buffer, layout::Rect, text::Text, widgets::Widget, DefaultTerminal, Frame};
@@ -11,7 +11,6 @@ fn radar_to_string(radar: &Radar, origin: Coordinate) -> String {
         .trace()
         .path()
         .map(|e| e + origin.into())
-        .chain(iter::once(origin.into()))
         .collect::<HashSet<_>>();
 
     for y in 0..radar.map().size() {
