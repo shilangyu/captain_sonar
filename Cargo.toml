@@ -1,0 +1,38 @@
+[package]
+name = "captain_sonar"
+version = "0.1.0"
+edition = "2021"
+description = "Digital helper for the Captain Sonar board game"
+
+[dependencies]
+crossterm = "0.28.1"
+ratatui = "0.29.0"
+
+
+[lints.clippy]
+match_same_arms = "warn"
+flat_map_option = "warn"
+semicolon_if_nothing_returned = "warn"
+inconsistent_struct_constructor = "warn"
+inefficient_to_string = "warn"
+missing_assert_message = "warn"
+allow_attributes = "warn"
+suspicious_doc_comments = "warn"
+redundant_type_annotations = "warn"
+ptr_cast_constness = "warn"
+needless_raw_string_hashes = "warn"
+iter_filter_is_ok = "warn"
+iter_filter_is_some = "warn"
+pub_underscore_fields = "warn"
+manual_is_variant_and = "warn"
+empty_enum_variants_with_brackets = "warn"
+str_split_at_newline = "warn"
+option_as_ref_cloned = "warn"
+renamed_function_params = "warn"
+assigning_clones = "warn"
+unused_result_ok = "warn"
+pathbuf_init_then_push = "warn"
+nursery = { level = "warn", priority = 2 }
+redundant_pub_crate = { level = "allow", priority = 3 }
+fallible_impl_from = { level = "allow", priority = 3 }
+option_if_let_else = { level = "allow", priority = 3 }
