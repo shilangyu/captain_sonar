@@ -1,4 +1,5 @@
 use captain_sonar::radar::*;
+use thiserror::Error;
 
 use std::{collections::HashSet, io};
 
@@ -53,12 +54,19 @@ fn main() -> io::Result<()> {
     app_result
 }
 
+#[derive(Debug, Error)]
+enum AppError {
+    #[error("Error registering move: {0}")]
+    Move(TraceMoveError),
+}
+
 #[derive(Debug)]
 pub struct App {
     exit: bool,
     radar: Radar,
     possible_starts: Vec<Coordinate>,
     show_start_index: Option<usize>,
+    error: Option<AppError>,
 }
 
 impl App {
@@ -68,6 +76,7 @@ impl App {
             radar,
             possible_starts: vec![],
             show_start_index: None,
+            error: None,
         };
 
         this.update_possible_starts();
@@ -120,19 +129,35 @@ impl App {
             }
             // TODO: propagate error
             KeyCode::Up => {
-                self.radar.register_move(Direction::North);
+                self.error = self
+                    .radar
+                    .register_move(Direction::North)
+                    .err()
+                    .map(AppError::Move);
                 self.update_possible_starts();
             }
             KeyCode::Down => {
-                self.radar.register_move(Direction::South);
+                self.error = self
+                    .radar
+                    .register_move(Direction::South)
+                    .err()
+                    .map(AppError::Move);
                 self.update_possible_starts();
             }
             KeyCode::Left => {
-                self.radar.register_move(Direction::West);
+                self.error = self
+                    .radar
+                    .register_move(Direction::West)
+                    .err()
+                    .map(AppError::Move);
                 self.update_possible_starts();
             }
             KeyCode::Right => {
-                self.radar.register_move(Direction::East);
+                self.error = self
+                    .radar
+                    .register_move(Direction::East)
+                    .err()
+                    .map(AppError::Move);
                 self.update_possible_starts();
             }
             KeyCode::Tab => {
@@ -151,7 +176,10 @@ impl App {
 
 impl Widget for &mut App {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        if let Some(index) = self.show_start_index {
+        if let Some(error) = &self.error {
+            let text = Text::from(error.to_string());
+            text.render(area, buf);
+        } else if let Some(index) = self.show_start_index {
             let origin = self.possible_starts[index];
 
             let mut s = radar_to_string(&self.radar, origin);

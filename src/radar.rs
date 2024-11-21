@@ -1,4 +1,6 @@
-use std::{collections::HashSet, ops::Add};
+use std::{collections::HashSet, iter, ops::Add};
+
+use thiserror::Error;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Coordinate {
@@ -105,7 +107,9 @@ pub struct Trace {
     moves: Vec<Direction>,
 }
 
+#[derive(Debug, Error)]
 pub enum TraceMoveError {
+    #[error("The move would intersect the path")]
     SelfIntersect,
 }
 
