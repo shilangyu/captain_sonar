@@ -157,6 +157,11 @@ impl Radar {
         self.trace.make_move(direction)
     }
 
+    /// Undo the last move. Returns `true` if there was a move to undo.
+    pub fn undo_move(&mut self) -> bool {
+        self.trace.moves.pop().is_some()
+    }
+
     pub fn get_possible_starts(&self) -> HashSet<Coordinate> {
         let mut starts = HashSet::new();
         let path = self.trace.path().collect::<Vec<_>>();

@@ -127,7 +127,14 @@ impl App {
             KeyCode::Char('q') => {
                 self.exit();
             }
-            // TODO: propagate error
+            KeyCode::Backspace => {
+                if self.error.is_some() {
+                    self.error = None;
+                } else {
+                    self.radar.undo_move();
+                    self.update_possible_starts();
+                }
+            }
             KeyCode::Up => {
                 self.error = self
                     .radar
