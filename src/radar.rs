@@ -162,38 +162,29 @@ impl Radar {
         self.trace.moves.pop().is_some()
     }
 
-    pub fn get_possible_starts(&self) -> HashSet<Coordinate> {
-        let mut starts = HashSet::new();
+    pub fn get_possible_starts(&self) -> impl Iterator<Item = Coordinate> + use<'_> {
         let path = self.trace.path().collect::<Vec<_>>();
 
-        for x in 0..self.map.size {
-            for y in 0..self.map.size {
-                let origin = Coordinate::new(x, y);
+        (0..self.map.size)
+            .flat_map(|x| (0..self.map.size).map(move |y| Coordinate::new(x, y)))
+            .filter(move |&origin| {
                 if self.map.obstacles.contains(&origin) {
-                    continue;
+                    return false;
                 }
-                let mut valid = true;
 
                 // check if all path fits in the board and it is not on an obstacle
                 for &p in &path {
                     let Ok(coord) = (p + origin.into()).try_into() else {
-                        valid = false;
-                        break;
+                        return false;
                     };
 
                     if self.map.obstacles.contains(&coord) || !self.map.contains(coord) {
-                        valid = false;
-                        break;
+                        return false;
                     }
                 }
 
-                if valid {
-                    starts.insert(origin);
-                }
-            }
-        }
-
-        starts
+                true
+            })
     }
 
     pub const fn map(&self) -> &Map {

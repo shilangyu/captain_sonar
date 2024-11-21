@@ -85,7 +85,7 @@ impl App {
     }
 
     fn update_possible_starts(&mut self) {
-        self.possible_starts = self.radar.get_possible_starts().into_iter().collect();
+        self.possible_starts = self.radar.get_possible_starts().collect();
         if self.possible_starts.is_empty() {
             self.show_start_index = None;
         } else {
