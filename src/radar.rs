@@ -1,4 +1,4 @@
-use std::{collections::HashSet, iter, ops::Add};
+use std::{collections::HashSet, ops::Add};
 
 use thiserror::Error;
 
@@ -127,7 +127,7 @@ impl Trace {
     fn make_move(&mut self, r#move: Move) -> Result<(), TraceMoveError> {
         match r#move {
             Move::Directed(direction) => {
-                let all_self_intersects = self.paths().all(|path| {
+                let all_self_intersects = self.paths().iter().all(|path| {
                     if let Some(last) = path.last() {
                         if path.contains(&(*last + direction.delta())) {
                             return true;
@@ -151,19 +151,48 @@ impl Trace {
         }
     }
 
-    pub fn paths(&self) -> impl Iterator<Item = Vec<Offset>> + '_ {
-        iter::once(
-            iter::once(Offset::ZERO)
-                .chain(self.moves.iter().scan(Offset::ZERO, |s, e| {
-                    let e = match e {
-                        Move::Directed(direction) => direction,
-                        Move::Dash => unreachable!(),
-                    };
-                    *s = *s + e.delta();
-                    Some(*s)
-                }))
-                .collect(),
-        )
+    pub fn paths(&self) -> Vec<Vec<Offset>> {
+        let mut paths = vec![vec![Offset::ZERO]];
+
+        for m in &self.moves {
+            match m {
+                Move::Directed(direction) => {
+                    for path in &mut paths {
+                        let last = path.last().unwrap();
+                        let next = *last + direction.delta();
+                        path.push(next);
+                    }
+                }
+                Move::Dash => {
+                    let mut new_paths = vec![];
+
+                    for path in &paths {
+                        for direction in &[
+                            Direction::North,
+                            Direction::East,
+                            Direction::South,
+                            Direction::West,
+                        ] {
+                            let mut new_path = path.clone();
+
+                            for _ in 0..4 {
+                                let last = new_path.last().unwrap();
+                                let next = *last + direction.delta();
+                                if new_path.contains(&next) {
+                                    break;
+                                }
+                                new_path.push(next);
+                                new_paths.push(new_path.clone());
+                            }
+                        }
+                    }
+
+                    paths.extend(new_paths);
+                }
+            }
+        }
+
+        paths
     }
 }
 
@@ -191,7 +220,7 @@ impl Radar {
     }
 
     pub fn get_possible_paths(&self) -> impl Iterator<Item = Vec<Coordinate>> + use<'_> {
-        let paths = self.trace.paths().collect::<Vec<_>>();
+        let paths = self.trace.paths();
 
         (0..self.map.size)
             .flat_map(|x| (0..self.map.size).map(move |y| Coordinate::new(x, y)))
