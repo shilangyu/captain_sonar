@@ -18,10 +18,20 @@ fn radar_to_string(radar: &Radar, path: &[Coordinate]) -> String {
             } else if path.contains(&coordinate) {
                 result.push('*');
             } else {
-                result.push('~');
+                result.push('.');
+            }
+
+            if x != radar.map().size() - 1 {
+                result.push_str("  ");
             }
         }
         result.push('\n');
+        if y != radar.map().size() - 1 {
+            for _ in 0..radar.map().size() * 2 - 1 {
+                result.push(' ');
+            }
+            result.push('\n');
+        }
     }
 
     result
