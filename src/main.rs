@@ -187,14 +187,21 @@ impl App {
 
 impl Widget for &mut App {
     fn render(self, area: Rect, buf: &mut Buffer) {
+        let instructions = "
+
+↑ - north, → - east, ↓ - south, ← - west
+tab - next path
+d - dash
+backspace - undo
+q - quit";
+
         if let Some(error) = &self.error {
-            let text = Text::from(error.to_string());
+            let text = Text::from(error.to_string() + instructions);
             text.render(area, buf);
         } else if let Some(index) = self.show_path_index {
             let path = &self.possible_paths[index];
 
             let mut s = radar_to_string(&self.radar, path);
-            s.push('\n');
             s.push('\n');
 
             s.push_str(&format!(
@@ -203,10 +210,10 @@ impl Widget for &mut App {
                 self.possible_paths.len()
             ));
 
-            let text = Text::from(s);
+            let text = Text::from(s + instructions);
             text.render(area, buf);
         } else {
-            let text = Text::from("No possible paths");
+            let text = Text::from("No possible paths".to_string() + instructions);
             text.render(area, buf);
         }
     }
