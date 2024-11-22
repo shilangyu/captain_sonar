@@ -6,20 +6,16 @@ use std::{collections::HashSet, io};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{buffer::Buffer, layout::Rect, text::Text, widgets::Widget, DefaultTerminal, Frame};
 
-fn radar_to_string(radar: &Radar, origin: Coordinate) -> String {
+fn radar_to_string(radar: &Radar, path: &[Coordinate]) -> String {
     let mut result = String::new();
-    let path = radar
-        .trace()
-        .path()
-        .map(|e| e + origin.into())
-        .collect::<HashSet<_>>();
+    let path = path.iter().copied().collect::<HashSet<_>>();
 
     for y in 0..radar.map().size() {
         for x in 0..radar.map().size() {
             let coordinate = Coordinate::new(x, y);
             if radar.map().obstacles().contains(&coordinate) {
                 result.push('#');
-            } else if path.contains(&coordinate.into()) {
+            } else if path.contains(&coordinate) {
                 result.push('*');
             } else {
                 result.push('~');
@@ -64,8 +60,8 @@ enum AppError {
 pub struct App {
     exit: bool,
     radar: Radar,
-    possible_starts: Vec<Coordinate>,
-    show_start_index: Option<usize>,
+    possible_paths: Vec<Vec<Coordinate>>,
+    show_path_index: Option<usize>,
     error: Option<AppError>,
 }
 
@@ -74,22 +70,22 @@ impl App {
         let mut this = Self {
             exit: false,
             radar,
-            possible_starts: vec![],
-            show_start_index: None,
+            possible_paths: vec![],
+            show_path_index: None,
             error: None,
         };
 
-        this.update_possible_starts();
+        this.update_possible_paths();
 
         this
     }
 
-    fn update_possible_starts(&mut self) {
-        self.possible_starts = self.radar.get_possible_starts().collect();
-        if self.possible_starts.is_empty() {
-            self.show_start_index = None;
+    fn update_possible_paths(&mut self) {
+        self.possible_paths = self.radar.get_possible_paths().collect();
+        if self.possible_paths.is_empty() {
+            self.show_path_index = None;
         } else {
-            self.show_start_index = Some(0);
+            self.show_path_index = Some(0);
         }
     }
 
@@ -132,7 +128,7 @@ impl App {
                     self.error = None;
                 } else {
                     self.radar.undo_move();
-                    self.update_possible_starts();
+                    self.update_possible_paths();
                 }
             }
             KeyCode::Up => {
@@ -141,7 +137,7 @@ impl App {
                     .register_move(Direction::North)
                     .err()
                     .map(AppError::Move);
-                self.update_possible_starts();
+                self.update_possible_paths();
             }
             KeyCode::Down => {
                 self.error = self
@@ -149,7 +145,7 @@ impl App {
                     .register_move(Direction::South)
                     .err()
                     .map(AppError::Move);
-                self.update_possible_starts();
+                self.update_possible_paths();
             }
             KeyCode::Left => {
                 self.error = self
@@ -157,7 +153,7 @@ impl App {
                     .register_move(Direction::West)
                     .err()
                     .map(AppError::Move);
-                self.update_possible_starts();
+                self.update_possible_paths();
             }
             KeyCode::Right => {
                 self.error = self
@@ -165,11 +161,11 @@ impl App {
                     .register_move(Direction::East)
                     .err()
                     .map(AppError::Move);
-                self.update_possible_starts();
+                self.update_possible_paths();
             }
             KeyCode::Tab => {
-                if let Some(index) = self.show_start_index {
-                    self.show_start_index = Some((index + 1) % self.possible_starts.len());
+                if let Some(index) = self.show_path_index {
+                    self.show_path_index = Some((index + 1) % self.possible_paths.len());
                 }
             }
             _ => (),
@@ -186,23 +182,23 @@ impl Widget for &mut App {
         if let Some(error) = &self.error {
             let text = Text::from(error.to_string());
             text.render(area, buf);
-        } else if let Some(index) = self.show_start_index {
-            let origin = self.possible_starts[index];
+        } else if let Some(index) = self.show_path_index {
+            let path = &self.possible_paths[index];
 
-            let mut s = radar_to_string(&self.radar, origin);
+            let mut s = radar_to_string(&self.radar, path);
             s.push('\n');
             s.push('\n');
 
             s.push_str(&format!(
-                "Possible trace: {}/{}",
+                "Possible path: {}/{}",
                 index + 1,
-                self.possible_starts.len()
+                self.possible_paths.len()
             ));
 
             let text = Text::from(s);
             text.render(area, buf);
         } else {
-            let text = Text::from("No possible traces");
+            let text = Text::from("No possible paths");
             text.render(area, buf);
         }
     }

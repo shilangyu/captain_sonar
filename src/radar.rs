@@ -162,28 +162,30 @@ impl Radar {
         self.trace.moves.pop().is_some()
     }
 
-    pub fn get_possible_starts(&self) -> impl Iterator<Item = Coordinate> + use<'_> {
+    pub fn get_possible_paths(&self) -> impl Iterator<Item = Vec<Coordinate>> + use<'_> {
         let path = self.trace.path().collect::<Vec<_>>();
 
         (0..self.map.size)
             .flat_map(|x| (0..self.map.size).map(move |y| Coordinate::new(x, y)))
-            .filter(move |&origin| {
+            .filter_map(move |origin| {
                 if self.map.obstacles.contains(&origin) {
-                    return false;
+                    return None;
                 }
 
                 // check if all path fits in the board and it is not on an obstacle
-                for &p in &path {
-                    let Ok(coord) = (p + origin.into()).try_into() else {
-                        return false;
-                    };
+                path.iter()
+                    .map(|&p| {
+                        let Ok(coord) = (p + origin.into()).try_into() else {
+                            return None;
+                        };
 
-                    if self.map.obstacles.contains(&coord) || !self.map.contains(coord) {
-                        return false;
-                    }
-                }
+                        if self.map.obstacles.contains(&coord) || !self.map.contains(coord) {
+                            return None;
+                        }
 
-                true
+                        Some(coord)
+                    })
+                    .collect()
             })
     }
 
