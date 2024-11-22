@@ -103,8 +103,14 @@ impl Direction {
 }
 
 #[derive(Debug)]
+pub enum Move {
+    Directed(Direction),
+    Dash,
+}
+
+#[derive(Debug)]
 pub struct Trace {
-    moves: Vec<Direction>,
+    moves: Vec<Move>,
 }
 
 #[derive(Debug, Error)]
@@ -118,24 +124,46 @@ impl Trace {
         Self { moves: Vec::new() }
     }
 
-    fn make_move(&mut self, direction: Direction) -> Result<(), TraceMoveError> {
-        let positions = self.path().collect::<Vec<_>>();
+    fn make_move(&mut self, r#move: Move) -> Result<(), TraceMoveError> {
+        match r#move {
+            Move::Directed(direction) => {
+                let all_self_intersects = self.paths().all(|path| {
+                    if let Some(last) = path.last() {
+                        if path.contains(&(*last + direction.delta())) {
+                            return true;
+                        }
+                    }
 
-        if let Some(last) = positions.last() {
-            if positions.contains(&(*last + direction.delta())) {
-                return Err(TraceMoveError::SelfIntersect);
+                    false
+                });
+
+                if all_self_intersects {
+                    return Err(TraceMoveError::SelfIntersect);
+                }
+
+                self.moves.push(Move::Directed(direction));
+                Ok(())
+            }
+            Move::Dash => {
+                self.moves.push(Move::Dash);
+                Ok(())
             }
         }
-        self.moves.push(direction);
-
-        Ok(())
     }
 
-    pub fn path(&self) -> impl Iterator<Item = Offset> + '_ {
-        iter::once(Offset::ZERO).chain(self.moves.iter().scan(Offset::ZERO, |s, e| {
-            *s = *s + e.delta();
-            Some(*s)
-        }))
+    pub fn paths(&self) -> impl Iterator<Item = Vec<Offset>> + '_ {
+        iter::once(
+            iter::once(Offset::ZERO)
+                .chain(self.moves.iter().scan(Offset::ZERO, |s, e| {
+                    let e = match e {
+                        Move::Directed(direction) => direction,
+                        Move::Dash => unreachable!(),
+                    };
+                    *s = *s + e.delta();
+                    Some(*s)
+                }))
+                .collect(),
+        )
     }
 }
 
@@ -153,8 +181,8 @@ impl Radar {
         }
     }
 
-    pub fn register_move(&mut self, direction: Direction) -> Result<(), TraceMoveError> {
-        self.trace.make_move(direction)
+    pub fn register_move(&mut self, r#move: Move) -> Result<(), TraceMoveError> {
+        self.trace.make_move(r#move)
     }
 
     /// Undo the last move. Returns `true` if there was a move to undo.
@@ -163,14 +191,18 @@ impl Radar {
     }
 
     pub fn get_possible_paths(&self) -> impl Iterator<Item = Vec<Coordinate>> + use<'_> {
-        let path = self.trace.path().collect::<Vec<_>>();
+        let paths = self.trace.paths().collect::<Vec<_>>();
 
         (0..self.map.size)
             .flat_map(|x| (0..self.map.size).map(move |y| Coordinate::new(x, y)))
-            .filter_map(move |origin| {
+            .flat_map(move |origin| {
                 if self.map.obstacles.contains(&origin) {
-                    return None;
+                    return vec![];
                 }
+
+                paths
+                    .iter()
+                    .filter_map(|path|
 
                 // check if all path fits in the board and it is not on an obstacle
                 path.iter()
@@ -185,6 +217,7 @@ impl Radar {
 
                         Some(coord)
                     })
+                    .collect())
                     .collect()
             })
     }

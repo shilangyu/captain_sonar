@@ -134,7 +134,7 @@ impl App {
             KeyCode::Up => {
                 self.error = self
                     .radar
-                    .register_move(Direction::North)
+                    .register_move(Move::Directed(Direction::North))
                     .err()
                     .map(AppError::Move);
                 self.update_possible_paths();
@@ -142,7 +142,7 @@ impl App {
             KeyCode::Down => {
                 self.error = self
                     .radar
-                    .register_move(Direction::South)
+                    .register_move(Move::Directed(Direction::South))
                     .err()
                     .map(AppError::Move);
                 self.update_possible_paths();
@@ -150,7 +150,7 @@ impl App {
             KeyCode::Left => {
                 self.error = self
                     .radar
-                    .register_move(Direction::West)
+                    .register_move(Move::Directed(Direction::West))
                     .err()
                     .map(AppError::Move);
                 self.update_possible_paths();
@@ -158,7 +158,15 @@ impl App {
             KeyCode::Right => {
                 self.error = self
                     .radar
-                    .register_move(Direction::East)
+                    .register_move(Move::Directed(Direction::East))
+                    .err()
+                    .map(AppError::Move);
+                self.update_possible_paths();
+            }
+            KeyCode::Char('d') => {
+                self.error = self
+                    .radar
+                    .register_move(Move::Dash)
                     .err()
                     .map(AppError::Move);
                 self.update_possible_paths();
