@@ -1,4 +1,7 @@
-use captain_sonar::radar::*;
+use captain_sonar::{
+    intel::{IntelQuestion, Quadrant},
+    radar::*,
+};
 use thiserror::Error;
 
 use std::{collections::HashSet, io};
@@ -66,12 +69,18 @@ enum AppError {
     Move(TraceMoveError),
 }
 
+#[derive(Debug, Clone, Copy)]
+enum SubMenu {
+    IntelPickQuadrant { quadrant: Option<Quadrant> },
+}
+
 #[derive(Debug)]
 pub struct App {
     exit: bool,
     radar: Radar,
     possible_paths: Vec<Vec<Coordinate>>,
     show_path_index: Option<usize>,
+    submenu: Option<SubMenu>,
     error: Option<AppError>,
 }
 
@@ -82,6 +91,7 @@ impl App {
             radar,
             possible_paths: vec![],
             show_path_index: None,
+            submenu: None,
             error: None,
         };
 
@@ -129,64 +139,130 @@ impl App {
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent) {
-        match key_event.code {
-            KeyCode::Char('q') => {
-                self.exit();
+        fn base_handling(app: &mut App, key_event: KeyEvent) -> bool {
+            match key_event.code {
+                KeyCode::Char('q') => {
+                    app.exit();
+                }
+                KeyCode::Backspace => {
+                    if app.error.is_some() {
+                        app.error = None;
+                    } else if let Some(submenu) = app.submenu {
+                        match submenu {
+                            SubMenu::IntelPickQuadrant { quadrant: None } => {
+                                app.submenu = None;
+                            }
+                            SubMenu::IntelPickQuadrant { quadrant: Some(_) } => {
+                                app.submenu = Some(SubMenu::IntelPickQuadrant { quadrant: None });
+                            }
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+                _ => return false,
             }
-            KeyCode::Backspace => {
-                if self.error.is_some() {
-                    self.error = None;
-                } else {
+
+            true
+        }
+
+        if base_handling(self, key_event) {
+            return;
+        }
+
+        match self.submenu {
+            None => match key_event.code {
+                KeyCode::Backspace => {
                     self.radar.undo_trace();
                     self.update_possible_paths();
                 }
-            }
-            KeyCode::Up => {
-                self.error = self
-                    .radar
-                    .register_move(Move::Directed(Direction::North))
-                    .err()
-                    .map(AppError::Move);
-                self.update_possible_paths();
-            }
-            KeyCode::Down => {
-                self.error = self
-                    .radar
-                    .register_move(Move::Directed(Direction::South))
-                    .err()
-                    .map(AppError::Move);
-                self.update_possible_paths();
-            }
-            KeyCode::Left => {
-                self.error = self
-                    .radar
-                    .register_move(Move::Directed(Direction::West))
-                    .err()
-                    .map(AppError::Move);
-                self.update_possible_paths();
-            }
-            KeyCode::Right => {
-                self.error = self
-                    .radar
-                    .register_move(Move::Directed(Direction::East))
-                    .err()
-                    .map(AppError::Move);
-                self.update_possible_paths();
-            }
-            KeyCode::Char('d') => {
-                self.error = self
-                    .radar
-                    .register_move(Move::Dash)
-                    .err()
-                    .map(AppError::Move);
-                self.update_possible_paths();
-            }
-            KeyCode::Tab => {
-                if let Some(index) = self.show_path_index {
-                    self.show_path_index = Some((index + 1) % self.possible_paths.len());
+                KeyCode::Up => {
+                    self.error = self
+                        .radar
+                        .register_move(Move::Directed(Direction::North))
+                        .err()
+                        .map(AppError::Move);
+                    self.update_possible_paths();
                 }
+                KeyCode::Down => {
+                    self.error = self
+                        .radar
+                        .register_move(Move::Directed(Direction::South))
+                        .err()
+                        .map(AppError::Move);
+                    self.update_possible_paths();
+                }
+                KeyCode::Left => {
+                    self.error = self
+                        .radar
+                        .register_move(Move::Directed(Direction::West))
+                        .err()
+                        .map(AppError::Move);
+                    self.update_possible_paths();
+                }
+                KeyCode::Right => {
+                    self.error = self
+                        .radar
+                        .register_move(Move::Directed(Direction::East))
+                        .err()
+                        .map(AppError::Move);
+                    self.update_possible_paths();
+                }
+                KeyCode::Char('d') => {
+                    self.error = self
+                        .radar
+                        .register_move(Move::Dash)
+                        .err()
+                        .map(AppError::Move);
+                    self.update_possible_paths();
+                }
+                KeyCode::Char('p') => {
+                    self.submenu = Some(SubMenu::IntelPickQuadrant { quadrant: None });
+                }
+                KeyCode::Tab => {
+                    if let Some(index) = self.show_path_index {
+                        self.show_path_index = Some((index + 1) % self.possible_paths.len());
+                    }
+                }
+                _ => (),
+            },
+            Some(SubMenu::IntelPickQuadrant { quadrant: None }) => match key_event.code {
+                KeyCode::Char('1') => {
+                    self.submenu = Some(SubMenu::IntelPickQuadrant {
+                        quadrant: Some(Quadrant::One),
+                    });
+                }
+                KeyCode::Char('2') => {
+                    self.submenu = Some(SubMenu::IntelPickQuadrant {
+                        quadrant: Some(Quadrant::Two),
+                    });
+                }
+                KeyCode::Char('3') => {
+                    self.submenu = Some(SubMenu::IntelPickQuadrant {
+                        quadrant: Some(Quadrant::Three),
+                    });
+                }
+                KeyCode::Char('4') => {
+                    self.submenu = Some(SubMenu::IntelPickQuadrant {
+                        quadrant: Some(Quadrant::Four),
+                    });
+                }
+                _ => (),
+            },
+            Some(SubMenu::IntelPickQuadrant {
+                quadrant: Some(quadrant),
+            }) => {
+                let answer = match key_event.code {
+                    KeyCode::Char('y') => true,
+                    KeyCode::Char('n') => false,
+                    _ => return,
+                };
+
+                self.radar
+                    .add_intel(IntelQuestion::InQuadrant { quadrant, answer });
+                self.submenu = None;
+                self.update_possible_paths();
             }
-            _ => (),
         }
     }
 
@@ -197,17 +273,42 @@ impl App {
 
 impl Widget for &mut App {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let instructions = "
+        const BASE_INSTRUCTIONS: &str = "
+backspace - undo
+q - quit";
+
+        let instructions = format!(
+            "
 
 ↑ - north, → - east, ↓ - south, ← - west
 tab - next path
 d - dash
-backspace - undo
-q - quit";
+p - collect quadrant intel (drone)
+{}",
+            BASE_INSTRUCTIONS
+        );
 
         if let Some(error) = &self.error {
-            let text = Text::from(error.to_string() + instructions);
+            let text = Text::from(error.to_string() + &instructions);
             text.render(area, buf);
+        } else if let Some(submenu) = self.submenu {
+            match submenu {
+                SubMenu::IntelPickQuadrant { quadrant: None } => {
+                    let text = Text::from(
+                        "Pick a quadrant (1, 2, 3, 4)".to_string() + "\n" + BASE_INSTRUCTIONS,
+                    );
+                    text.render(area, buf);
+                }
+                SubMenu::IntelPickQuadrant {
+                    quadrant: Some(quadrant),
+                } => {
+                    let text = Text::from(format!(
+                        "In quadrant {}? Pick answer (y / n)\n{}",
+                        quadrant, BASE_INSTRUCTIONS
+                    ));
+                    text.render(area, buf);
+                }
+            }
         } else if let Some(index) = self.show_path_index {
             let path = &self.possible_paths[index];
 
@@ -220,10 +321,10 @@ q - quit";
                 self.possible_paths.len()
             ));
 
-            let text = Text::from(s + instructions);
+            let text = Text::from(s + &instructions);
             text.render(area, buf);
         } else {
-            let text = Text::from("No possible paths".to_string() + instructions);
+            let text = Text::from("No possible paths".to_string() + &instructions);
             text.render(area, buf);
         }
     }
