@@ -2,7 +2,7 @@ use std::{collections::HashSet, ops::Add};
 
 use thiserror::Error;
 
-use crate::intel::{IntelQuestion, Quadrant};
+use crate::intel::{InformationPiece, IntelQuestion, Quadrant};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Coordinate {
@@ -319,7 +319,20 @@ impl Radar {
                                             }
                                         }
                                         IntelQuestion::TruthLie { truth, lie } => {
-                                            todo!()
+                                            let check = |&info| match info {
+                                                InformationPiece::Quadrant(info_quadrant) => {
+                                                    info_quadrant == quadrant
+                                                }
+                                                InformationPiece::Column(column) => {
+                                                    coord.x == column
+                                                }
+                                                InformationPiece::Row(row) => coord.y == row,
+                                            };
+
+                                            // either both are true or both are false
+                                            if check(truth) == check(lie) {
+                                                return None;
+                                            }
                                         }
                                     }
                                 }
