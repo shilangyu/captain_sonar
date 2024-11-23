@@ -137,7 +137,7 @@ impl App {
                 if self.error.is_some() {
                     self.error = None;
                 } else {
-                    self.radar.undo_move();
+                    self.radar.undo_trace();
                     self.update_possible_paths();
                 }
             }

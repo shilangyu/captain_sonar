@@ -182,7 +182,7 @@ impl Trace {
         }
     }
 
-    fn undo_move(&mut self) -> bool {
+    fn undo_trace(&mut self) -> bool {
         self.trace.pop().is_some()
     }
 
@@ -269,9 +269,9 @@ impl Radar {
         self.trace.make_move(r#move)
     }
 
-    /// Undo the last move. Returns `true` if there was a move to undo.
-    pub fn undo_move(&mut self) -> bool {
-        self.trace.undo_move()
+    /// Undo the last trace (move/intel). Returns `true` if there was a trace to undo.
+    pub fn undo_trace(&mut self) -> bool {
+        self.trace.undo_trace()
     }
 
     pub fn get_possible_paths(&self) -> impl Iterator<Item = Vec<Coordinate>> + use<'_> {
