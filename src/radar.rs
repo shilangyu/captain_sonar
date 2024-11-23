@@ -2,6 +2,8 @@ use std::{collections::HashSet, ops::Add};
 
 use thiserror::Error;
 
+use crate::intel::{IntelQuestion, Quadrant};
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Coordinate {
     x: u32,
@@ -74,6 +76,19 @@ impl Map {
         coord.x < self.size && coord.y < self.size
     }
 
+    pub const fn quadrant_of(&self, coord: Coordinate) -> Option<Quadrant> {
+        if !self.contains(coord) {
+            return None;
+        }
+
+        Some(match (coord.x < self.size / 2, coord.y < self.size / 2) {
+            (true, true) => Quadrant::One,
+            (false, true) => Quadrant::Two,
+            (true, false) => Quadrant::Three,
+            (false, false) => Quadrant::Four,
+        })
+    }
+
     pub const fn size(&self) -> u32 {
         self.size
     }
@@ -109,8 +124,14 @@ pub enum Move {
 }
 
 #[derive(Debug)]
+pub enum TraceElement {
+    Move(Move),
+    Intel(IntelQuestion),
+}
+
+#[derive(Debug)]
 pub struct Trace {
-    moves: Vec<Move>,
+    trace: Vec<TraceElement>,
 }
 
 #[derive(Debug, Error)]
@@ -119,9 +140,15 @@ pub enum TraceMoveError {
     SelfIntersect,
 }
 
+#[derive(Debug, Clone)]
+pub struct OffsetWithIntel {
+    offset: Offset,
+    intel: Vec<IntelQuestion>,
+}
+
 impl Trace {
     const fn new() -> Self {
-        Self { moves: Vec::new() }
+        Self { trace: Vec::new() }
     }
 
     fn make_move(&mut self, r#move: Move) -> Result<(), TraceMoveError> {
@@ -129,7 +156,10 @@ impl Trace {
             Move::Directed(direction) => {
                 let all_self_intersects = self.paths().iter().all(|path| {
                     if let Some(last) = path.last() {
-                        if path.contains(&(*last + direction.delta())) {
+                        if path
+                            .iter()
+                            .any(|p| p.offset == (last.offset + direction.delta()))
+                        {
                             return true;
                         }
                     }
@@ -141,29 +171,44 @@ impl Trace {
                     return Err(TraceMoveError::SelfIntersect);
                 }
 
-                self.moves.push(Move::Directed(direction));
+                self.trace
+                    .push(TraceElement::Move(Move::Directed(direction)));
                 Ok(())
             }
             Move::Dash => {
-                self.moves.push(Move::Dash);
+                self.trace.push(TraceElement::Move(Move::Dash));
                 Ok(())
             }
         }
     }
 
-    pub fn paths(&self) -> Vec<Vec<Offset>> {
-        let mut paths = vec![vec![Offset::ZERO]];
+    fn undo_move(&mut self) -> bool {
+        self.trace.pop().is_some()
+    }
 
-        for m in &self.moves {
+    fn add_intel(&mut self, intel: IntelQuestion) {
+        self.trace.push(TraceElement::Intel(intel));
+    }
+
+    pub fn paths(&self) -> Vec<Vec<OffsetWithIntel>> {
+        let mut paths = vec![vec![OffsetWithIntel {
+            offset: Offset::ZERO,
+            intel: vec![],
+        }]];
+
+        for m in &self.trace {
             match m {
-                Move::Directed(direction) => {
+                TraceElement::Move(Move::Directed(direction)) => {
                     for path in &mut paths {
                         let last = path.last().unwrap();
-                        let next = *last + direction.delta();
+                        let next = OffsetWithIntel {
+                            offset: last.offset + direction.delta(),
+                            intel: vec![],
+                        };
                         path.push(next);
                     }
                 }
-                Move::Dash => {
+                TraceElement::Move(Move::Dash) => {
                     let mut new_paths = vec![];
 
                     for path in &paths {
@@ -177,8 +222,12 @@ impl Trace {
 
                             for _ in 0..4 {
                                 let last = new_path.last().unwrap();
-                                let next = *last + direction.delta();
-                                if new_path.contains(&next) {
+                                let next = OffsetWithIntel {
+                                    offset: last.offset + direction.delta(),
+                                    intel: vec![],
+                                };
+
+                                if new_path.iter().any(|p| p.offset == next.offset) {
                                     break;
                                 }
                                 new_path.push(next);
@@ -188,6 +237,12 @@ impl Trace {
                     }
 
                     paths.extend(new_paths);
+                }
+                TraceElement::Intel(intel) => {
+                    for path in &mut paths {
+                        let last = path.last_mut().unwrap();
+                        last.intel.push(*intel);
+                    }
                 }
             }
         }
@@ -216,7 +271,7 @@ impl Radar {
 
     /// Undo the last move. Returns `true` if there was a move to undo.
     pub fn undo_move(&mut self) -> bool {
-        self.trace.moves.pop().is_some()
+        self.trace.undo_move()
     }
 
     pub fn get_possible_paths(&self) -> impl Iterator<Item = Vec<Coordinate>> + use<'_> {
@@ -231,24 +286,54 @@ impl Radar {
 
                 paths
                     .iter()
-                    .filter_map(|path|
+                    .filter_map(|path| {
+                        path.iter()
+                            .map(|p| {
+                                // check if we are a coordinate
+                                let Ok(coord) = (p.offset + origin.into()).try_into() else {
+                                    return None;
+                                };
 
-                // check if all path fits in the board and it is not on an obstacle
-                path.iter()
-                    .map(|&p| {
-                        let Ok(coord) = (p + origin.into()).try_into() else {
-                            return None;
-                        };
+                                // check if we are in some quadrant
+                                let quadrant = self.map.quadrant_of(coord)?;
 
-                        if self.map.obstacles.contains(&coord) || !self.map.contains(coord) {
-                            return None;
-                        }
+                                // check if we are on an obstacle
+                                if self.map.obstacles.contains(&coord) {
+                                    return None;
+                                }
 
-                        Some(coord)
+                                // check if intel excludes this coordinate
+                                for intel in &p.intel {
+                                    match intel {
+                                        IntelQuestion::InQuadrant {
+                                            quadrant: question_quadrant,
+                                            answer,
+                                        } => {
+                                            let valid = match answer {
+                                                true => quadrant == *question_quadrant,
+                                                false => quadrant != *question_quadrant,
+                                            };
+
+                                            if !valid {
+                                                return None;
+                                            }
+                                        }
+                                        IntelQuestion::TruthLie { truth, lie } => {
+                                            todo!()
+                                        }
+                                    }
+                                }
+
+                                Some(coord)
+                            })
+                            .collect()
                     })
-                    .collect())
                     .collect()
             })
+    }
+
+    pub fn add_intel(&mut self, intel: IntelQuestion) {
+        self.trace.add_intel(intel);
     }
 
     pub const fn map(&self) -> &Map {
