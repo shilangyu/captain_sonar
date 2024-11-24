@@ -27,6 +27,16 @@ pub enum InformationPiece {
     Row(u32),
 }
 
+impl Display for InformationPiece {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Quadrant(q) => write!(f, "{}", q),
+            Self::Column(c) => write!(f, "{}", char::from_u32('a' as u32 + c).unwrap()),
+            Self::Row(r) => write!(f, "{}", r),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum IntelQuestion {
     /// aka drone

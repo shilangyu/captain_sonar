@@ -436,7 +436,7 @@ s - collect truth/lie intel (sonar)
                                 format!(
                                     "Info 1 about {} is that it is {}.\nPick info 2 kind ({})",
                                     PickTruthLieKind::from(piece),
-                                    todo!(),
+                                    piece,
                                     kind_instruction
                                 )
                             }
@@ -444,7 +444,7 @@ s - collect truth/lie intel (sonar)
                                 format!(
                                     "Info 1 about {} is that it is {}.\nInfo 2 about {} ({})",
                                     PickTruthLieKind::from(info1),
-                                    todo!(),
+                                    info1,
                                     kind,
                                     info_instruction(kind)
                                 )
