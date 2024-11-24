@@ -32,7 +32,7 @@ pub enum IntelQuestion {
     /// aka drone
     InQuadrant { quadrant: Quadrant, answer: bool },
     TruthLie {
-        truth: InformationPiece,
-        lie: InformationPiece,
+        info1: InformationPiece,
+        info2: InformationPiece,
     },
 }

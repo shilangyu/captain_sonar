@@ -318,7 +318,7 @@ impl Radar {
                                                 return None;
                                             }
                                         }
-                                        IntelQuestion::TruthLie { truth, lie } => {
+                                        IntelQuestion::TruthLie { info1, info2 } => {
                                             let check = |&info| match info {
                                                 InformationPiece::Quadrant(info_quadrant) => {
                                                     info_quadrant == quadrant
@@ -330,7 +330,7 @@ impl Radar {
                                             };
 
                                             // either both are true or both are false
-                                            if check(truth) == check(lie) {
+                                            if check(info1) == check(info2) {
                                                 return None;
                                             }
                                         }

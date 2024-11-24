@@ -99,10 +99,10 @@ impl Display for PickTruthLieKind {
 #[derive(Debug, Clone, Copy)]
 enum PickTruthLieProgress {
     None,
-    TruthKind(PickTruthLieKind),
-    TruthInformation(InformationPiece),
-    LieKind {
-        truth: InformationPiece,
+    Info1Kind(PickTruthLieKind),
+    Info1Information(InformationPiece),
+    Info2Kind {
+        info1: InformationPiece,
         kind: PickTruthLieKind,
     },
 }
@@ -111,13 +111,13 @@ impl PickTruthLieProgress {
     const fn previous(&self) -> Option<Self> {
         Some(match self {
             Self::None => return None,
-            Self::TruthKind(_) => Self::None,
-            Self::TruthInformation(piece) => Self::TruthKind(match piece {
+            Self::Info1Kind(_) => Self::None,
+            Self::Info1Information(piece) => Self::Info1Kind(match piece {
                 InformationPiece::Quadrant(_) => PickTruthLieKind::Quadrant,
                 InformationPiece::Row(_) => PickTruthLieKind::Row,
                 InformationPiece::Column(_) => PickTruthLieKind::Column,
             }),
-            Self::LieKind { truth, .. } => Self::TruthInformation(*truth),
+            Self::Info2Kind { info1, .. } => Self::Info1Information(*info1),
         })
     }
 }
@@ -343,30 +343,28 @@ impl App {
                 PickTruthLieProgress::None => {
                     if let Some(kind) = read_truth_lie_kind(key_event) {
                         self.submenu = Some(Submenu::IntelPickTruthLie(
-                            PickTruthLieProgress::TruthKind(kind),
+                            PickTruthLieProgress::Info1Kind(kind),
                         ));
                     }
                 }
-                PickTruthLieProgress::TruthKind(kind) => {
+                PickTruthLieProgress::Info1Kind(kind) => {
                     if let Some(info) = read_information_piece(key_event, kind) {
                         self.submenu = Some(Submenu::IntelPickTruthLie(
-                            PickTruthLieProgress::TruthInformation(info),
+                            PickTruthLieProgress::Info1Information(info),
                         ));
                     }
                 }
-                PickTruthLieProgress::TruthInformation(truth) => {
+                PickTruthLieProgress::Info1Information(info1) => {
                     if let Some(kind) = read_truth_lie_kind(key_event) {
-                        self.submenu =
-                            Some(Submenu::IntelPickTruthLie(PickTruthLieProgress::LieKind {
-                                truth,
-                                kind,
-                            }));
+                        self.submenu = Some(Submenu::IntelPickTruthLie(
+                            PickTruthLieProgress::Info2Kind { info1, kind },
+                        ));
                     }
                 }
-                PickTruthLieProgress::LieKind { truth, kind } => {
-                    if let Some(info) = read_information_piece(key_event, kind) {
+                PickTruthLieProgress::Info2Kind { info1, kind } => {
+                    if let Some(info2) = read_information_piece(key_event, kind) {
                         self.radar
-                            .add_intel(IntelQuestion::TruthLie { truth, lie: info });
+                            .add_intel(IntelQuestion::TruthLie { info1, info2 });
                         self.submenu = None;
                         self.update_possible_paths();
                     }
@@ -429,23 +427,23 @@ s - collect truth/lie intel (sonar)
                     let text = Text::from(
                         match progress {
                             PickTruthLieProgress::None => {
-                                format!("Pick a truth kind ({})", kind_instruction)
+                                format!("Pick info 1 kind ({})", kind_instruction)
                             }
-                            PickTruthLieProgress::TruthKind(kind) => {
-                                format!("Truth about {} ({})", kind, info_instruction(kind))
+                            PickTruthLieProgress::Info1Kind(kind) => {
+                                format!("Info 1 about {} ({})", kind, info_instruction(kind))
                             }
-                            PickTruthLieProgress::TruthInformation(piece) => {
+                            PickTruthLieProgress::Info1Information(piece) => {
                                 format!(
-                                    "Truth about {} is that it is {}.\nPick lie kind ({})",
+                                    "Info 1 about {} is that it is {}.\nPick info 2 kind ({})",
                                     PickTruthLieKind::from(piece),
                                     todo!(),
                                     kind_instruction
                                 )
                             }
-                            PickTruthLieProgress::LieKind { truth, kind } => {
+                            PickTruthLieProgress::Info2Kind { info1, kind } => {
                                 format!(
-                                    "Truth about {} is that it is {}.\nLie about {} ({})",
-                                    PickTruthLieKind::from(truth),
+                                    "Info 1 about {} is that it is {}.\nInfo 2 about {} ({})",
+                                    PickTruthLieKind::from(info1),
                                     todo!(),
                                     kind,
                                     info_instruction(kind)
