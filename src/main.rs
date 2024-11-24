@@ -1,10 +1,10 @@
 use captain_sonar::{
-    intel::{IntelQuestion, Quadrant},
+    intel::{InformationPiece, IntelQuestion, Quadrant},
     radar::*,
 };
 use thiserror::Error;
 
-use std::{collections::HashSet, io};
+use std::{collections::HashSet, fmt::Display, io};
 
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{buffer::Buffer, layout::Rect, text::Text, widgets::Widget, DefaultTerminal, Frame};
@@ -70,8 +70,74 @@ enum AppError {
 }
 
 #[derive(Debug, Clone, Copy)]
-enum SubMenu {
+enum PickTruthLieKind {
+    Quadrant,
+    Row,
+    Column,
+}
+
+impl From<InformationPiece> for PickTruthLieKind {
+    fn from(value: InformationPiece) -> Self {
+        match value {
+            InformationPiece::Quadrant(_) => Self::Quadrant,
+            InformationPiece::Row(_) => Self::Row,
+            InformationPiece::Column(_) => Self::Column,
+        }
+    }
+}
+
+impl Display for PickTruthLieKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Quadrant => write!(f, "quadrant"),
+            Self::Row => write!(f, "row"),
+            Self::Column => write!(f, "column"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum PickTruthLieProgress {
+    None,
+    TruthKind(PickTruthLieKind),
+    TruthInformation(InformationPiece),
+    LieKind {
+        truth: InformationPiece,
+        kind: PickTruthLieKind,
+    },
+}
+
+impl PickTruthLieProgress {
+    const fn previous(&self) -> Option<Self> {
+        Some(match self {
+            Self::None => return None,
+            Self::TruthKind(_) => Self::None,
+            Self::TruthInformation(piece) => Self::TruthKind(match piece {
+                InformationPiece::Quadrant(_) => PickTruthLieKind::Quadrant,
+                InformationPiece::Row(_) => PickTruthLieKind::Row,
+                InformationPiece::Column(_) => PickTruthLieKind::Column,
+            }),
+            Self::LieKind { truth, .. } => Self::TruthInformation(*truth),
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Submenu {
     IntelPickQuadrant { quadrant: Option<Quadrant> },
+    IntelPickTruthLie(PickTruthLieProgress),
+}
+
+impl Submenu {
+    fn previous(&self) -> Option<Self> {
+        Some(match self {
+            Self::IntelPickQuadrant { quadrant: None } => return None,
+            Self::IntelPickQuadrant { quadrant: Some(_) } => {
+                Self::IntelPickQuadrant { quadrant: None }
+            }
+            Self::IntelPickTruthLie(progress) => Self::IntelPickTruthLie(progress.previous()?),
+        })
+    }
 }
 
 #[derive(Debug)]
@@ -80,7 +146,7 @@ pub struct App {
     radar: Radar,
     possible_paths: Vec<Vec<Coordinate>>,
     show_path_index: Option<usize>,
-    submenu: Option<SubMenu>,
+    submenu: Option<Submenu>,
     error: Option<AppError>,
 }
 
@@ -141,21 +207,14 @@ impl App {
     fn handle_key_event(&mut self, key_event: KeyEvent) {
         fn base_handling(app: &mut App, key_event: KeyEvent) -> bool {
             match key_event.code {
-                KeyCode::Char('q') => {
+                KeyCode::Esc => {
                     app.exit();
                 }
                 KeyCode::Backspace => {
                     if app.error.is_some() {
                         app.error = None;
                     } else if let Some(submenu) = app.submenu {
-                        match submenu {
-                            SubMenu::IntelPickQuadrant { quadrant: None } => {
-                                app.submenu = None;
-                            }
-                            SubMenu::IntelPickQuadrant { quadrant: Some(_) } => {
-                                app.submenu = Some(SubMenu::IntelPickQuadrant { quadrant: None });
-                            }
-                        }
+                        app.submenu = submenu.previous();
                     } else {
                         return false;
                     }
@@ -164,6 +223,38 @@ impl App {
             }
 
             true
+        }
+
+        const fn read_quadrant(key_event: KeyEvent) -> Option<Quadrant> {
+            match key_event.code {
+                KeyCode::Char('1') => Some(Quadrant::One),
+                KeyCode::Char('2') => Some(Quadrant::Two),
+                KeyCode::Char('3') => Some(Quadrant::Three),
+                KeyCode::Char('4') => Some(Quadrant::Four),
+                _ => None,
+            }
+        }
+
+        const fn read_truth_lie_kind(key_event: KeyEvent) -> Option<PickTruthLieKind> {
+            match key_event.code {
+                KeyCode::Char('q') => Some(PickTruthLieKind::Quadrant),
+                KeyCode::Char('r') => Some(PickTruthLieKind::Row),
+                KeyCode::Char('c') => Some(PickTruthLieKind::Column),
+                _ => None,
+            }
+        }
+
+        fn read_information_piece(
+            key_event: KeyEvent,
+            kind: PickTruthLieKind,
+        ) -> Option<InformationPiece> {
+            match kind {
+                PickTruthLieKind::Quadrant => {
+                    read_quadrant(key_event).map(InformationPiece::Quadrant)
+                }
+                PickTruthLieKind::Row => todo!(),
+                PickTruthLieKind::Column => todo!(),
+            }
         }
 
         if base_handling(self, key_event) {
@@ -216,8 +307,11 @@ impl App {
                         .map(AppError::Move);
                     self.update_possible_paths();
                 }
-                KeyCode::Char('p') => {
-                    self.submenu = Some(SubMenu::IntelPickQuadrant { quadrant: None });
+                KeyCode::Char('q') => {
+                    self.submenu = Some(Submenu::IntelPickQuadrant { quadrant: None });
+                }
+                KeyCode::Char('s') => {
+                    self.submenu = Some(Submenu::IntelPickTruthLie(PickTruthLieProgress::None));
                 }
                 KeyCode::Tab => {
                     if let Some(index) = self.show_path_index {
@@ -226,30 +320,12 @@ impl App {
                 }
                 _ => (),
             },
-            Some(SubMenu::IntelPickQuadrant { quadrant: None }) => match key_event.code {
-                KeyCode::Char('1') => {
-                    self.submenu = Some(SubMenu::IntelPickQuadrant {
-                        quadrant: Some(Quadrant::One),
-                    });
-                }
-                KeyCode::Char('2') => {
-                    self.submenu = Some(SubMenu::IntelPickQuadrant {
-                        quadrant: Some(Quadrant::Two),
-                    });
-                }
-                KeyCode::Char('3') => {
-                    self.submenu = Some(SubMenu::IntelPickQuadrant {
-                        quadrant: Some(Quadrant::Three),
-                    });
-                }
-                KeyCode::Char('4') => {
-                    self.submenu = Some(SubMenu::IntelPickQuadrant {
-                        quadrant: Some(Quadrant::Four),
-                    });
-                }
-                _ => (),
-            },
-            Some(SubMenu::IntelPickQuadrant {
+            Some(Submenu::IntelPickQuadrant { quadrant: None }) => {
+                self.submenu = Some(Submenu::IntelPickQuadrant {
+                    quadrant: read_quadrant(key_event),
+                });
+            }
+            Some(Submenu::IntelPickQuadrant {
                 quadrant: Some(quadrant),
             }) => {
                 let answer = match key_event.code {
@@ -263,6 +339,39 @@ impl App {
                 self.submenu = None;
                 self.update_possible_paths();
             }
+            Some(Submenu::IntelPickTruthLie(progress)) => match progress {
+                PickTruthLieProgress::None => {
+                    if let Some(kind) = read_truth_lie_kind(key_event) {
+                        self.submenu = Some(Submenu::IntelPickTruthLie(
+                            PickTruthLieProgress::TruthKind(kind),
+                        ));
+                    }
+                }
+                PickTruthLieProgress::TruthKind(kind) => {
+                    if let Some(info) = read_information_piece(key_event, kind) {
+                        self.submenu = Some(Submenu::IntelPickTruthLie(
+                            PickTruthLieProgress::TruthInformation(info),
+                        ));
+                    }
+                }
+                PickTruthLieProgress::TruthInformation(truth) => {
+                    if let Some(kind) = read_truth_lie_kind(key_event) {
+                        self.submenu =
+                            Some(Submenu::IntelPickTruthLie(PickTruthLieProgress::LieKind {
+                                truth,
+                                kind,
+                            }));
+                    }
+                }
+                PickTruthLieProgress::LieKind { truth, kind } => {
+                    if let Some(info) = read_information_piece(key_event, kind) {
+                        self.radar
+                            .add_intel(IntelQuestion::TruthLie { truth, lie: info });
+                        self.submenu = None;
+                        self.update_possible_paths();
+                    }
+                }
+            },
         }
     }
 
@@ -275,7 +384,7 @@ impl Widget for &mut App {
     fn render(self, area: Rect, buf: &mut Buffer) {
         const BASE_INSTRUCTIONS: &str = "
 backspace - undo
-q - quit";
+ESC - quit";
 
         let instructions = format!(
             "
@@ -283,7 +392,8 @@ q - quit";
 ↑ - north, → - east, ↓ - south, ← - west
 tab - next path
 d - dash
-p - collect quadrant intel (drone)
+q - collect quadrant intel (drone)
+s - collect truth/lie intel (sonar)
 {}",
             BASE_INSTRUCTIONS
         );
@@ -293,19 +403,57 @@ p - collect quadrant intel (drone)
             text.render(area, buf);
         } else if let Some(submenu) = self.submenu {
             match submenu {
-                SubMenu::IntelPickQuadrant { quadrant: None } => {
+                Submenu::IntelPickQuadrant { quadrant: None } => {
                     let text = Text::from(
                         "Pick a quadrant (1, 2, 3, 4)".to_string() + "\n" + BASE_INSTRUCTIONS,
                     );
                     text.render(area, buf);
                 }
-                SubMenu::IntelPickQuadrant {
+                Submenu::IntelPickQuadrant {
                     quadrant: Some(quadrant),
                 } => {
                     let text = Text::from(format!(
                         "In quadrant {}? Pick answer (y / n)\n{}",
                         quadrant, BASE_INSTRUCTIONS
                     ));
+                    text.render(area, buf);
+                }
+                Submenu::IntelPickTruthLie(progress) => {
+                    let kind_instruction = "q - quadrant, r - row, c - column";
+                    let info_instruction = |kind| match kind {
+                        PickTruthLieKind::Quadrant => "1, 2, 3, 4",
+                        PickTruthLieKind::Row => todo!(),
+                        PickTruthLieKind::Column => todo!(),
+                    };
+
+                    let text = Text::from(
+                        match progress {
+                            PickTruthLieProgress::None => {
+                                format!("Pick a truth kind ({})", kind_instruction)
+                            }
+                            PickTruthLieProgress::TruthKind(kind) => {
+                                format!("Truth about {} ({})", kind, info_instruction(kind))
+                            }
+                            PickTruthLieProgress::TruthInformation(piece) => {
+                                format!(
+                                    "Truth about {} is that it is {}.\nPick lie kind ({})",
+                                    PickTruthLieKind::from(piece),
+                                    todo!(),
+                                    kind_instruction
+                                )
+                            }
+                            PickTruthLieProgress::LieKind { truth, kind } => {
+                                format!(
+                                    "Truth about {} is that it is {}.\nLie about {} ({})",
+                                    PickTruthLieKind::from(truth),
+                                    todo!(),
+                                    kind,
+                                    info_instruction(kind)
+                                )
+                            }
+                        } + "\n"
+                            + BASE_INSTRUCTIONS,
+                    );
                     text.render(area, buf);
                 }
             }
