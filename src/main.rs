@@ -245,6 +245,7 @@ impl App {
         }
 
         fn read_information_piece(
+            app: &App,
             key_event: KeyEvent,
             kind: PickTruthLieKind,
         ) -> Option<InformationPiece> {
@@ -253,7 +254,20 @@ impl App {
                     read_quadrant(key_event).map(InformationPiece::Quadrant)
                 }
                 PickTruthLieKind::Row => todo!(),
-                PickTruthLieKind::Column => todo!(),
+                PickTruthLieKind::Column => match key_event.code {
+                    KeyCode::Char(c) => {
+                        // make sure we don't undeflow
+                        if c >= 'a' {
+                            let offset = c as u32 - 'a' as u32;
+                            if offset < app.radar.map().size() {
+                                return Some(InformationPiece::Column(offset));
+                            }
+                        }
+
+                        None
+                    }
+                    _ => None,
+                },
             }
         }
 
@@ -348,7 +362,7 @@ impl App {
                     }
                 }
                 PickTruthLieProgress::Info1Kind(kind) => {
-                    if let Some(info) = read_information_piece(key_event, kind) {
+                    if let Some(info) = read_information_piece(self, key_event, kind) {
                         self.submenu = Some(Submenu::IntelPickTruthLie(
                             PickTruthLieProgress::Info1Information(info),
                         ));
@@ -362,7 +376,7 @@ impl App {
                     }
                 }
                 PickTruthLieProgress::Info2Kind { info1, kind } => {
-                    if let Some(info2) = read_information_piece(key_event, kind) {
+                    if let Some(info2) = read_information_piece(self, key_event, kind) {
                         self.radar
                             .add_intel(IntelQuestion::TruthLie { info1, info2 });
                         self.submenu = None;
@@ -419,9 +433,13 @@ s - collect truth/lie intel (sonar)
                 Submenu::IntelPickTruthLie(progress) => {
                     let kind_instruction = "q - quadrant, r - row, c - column";
                     let info_instruction = |kind| match kind {
-                        PickTruthLieKind::Quadrant => "1, 2, 3, 4",
+                        PickTruthLieKind::Quadrant => "1, 2, 3, 4".to_string(),
                         PickTruthLieKind::Row => todo!(),
-                        PickTruthLieKind::Column => todo!(),
+                        PickTruthLieKind::Column => ('a'..='z')
+                            .take(self.radar.map().size() as usize)
+                            .map(String::from)
+                            .collect::<Vec<_>>()
+                            .join(", "),
                     };
 
                     let text = Text::from(
