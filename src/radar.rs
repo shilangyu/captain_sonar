@@ -127,6 +127,7 @@ pub enum Move {
 pub enum TraceElement {
     Move(Move),
     Intel(IntelQuestion),
+    Mine,
 }
 
 #[derive(Debug)]
@@ -144,6 +145,7 @@ pub enum TraceMoveError {
 pub struct OffsetWithIntel {
     offset: Offset,
     intel: Vec<IntelQuestion>,
+    has_mine: bool,
 }
 
 impl Trace {
@@ -190,10 +192,15 @@ impl Trace {
         self.trace.push(TraceElement::Intel(intel));
     }
 
+    fn plant_mine(&mut self) {
+        self.trace.push(TraceElement::Mine);
+    }
+
     pub fn paths(&self) -> Vec<Vec<OffsetWithIntel>> {
         let mut paths = vec![vec![OffsetWithIntel {
             offset: Offset::ZERO,
             intel: vec![],
+            has_mine: false,
         }]];
 
         for m in &self.trace {
@@ -204,6 +211,7 @@ impl Trace {
                         let next = OffsetWithIntel {
                             offset: last.offset + direction.delta(),
                             intel: vec![],
+                            has_mine: false,
                         };
                         path.push(next);
                     }
@@ -225,6 +233,7 @@ impl Trace {
                                 let next = OffsetWithIntel {
                                     offset: last.offset + direction.delta(),
                                     intel: vec![],
+                                    has_mine: false,
                                 };
 
                                 if new_path.iter().any(|p| p.offset == next.offset) {
@@ -242,6 +251,12 @@ impl Trace {
                     for path in &mut paths {
                         let last = path.last_mut().unwrap();
                         last.intel.push(*intel);
+                    }
+                }
+                TraceElement::Mine => {
+                    for path in &mut paths {
+                        let last = path.last_mut().unwrap();
+                        last.has_mine = true;
                     }
                 }
             }
@@ -272,6 +287,10 @@ impl Radar {
     /// Undo the last trace (move/intel). Returns `true` if there was a trace to undo.
     pub fn undo_trace(&mut self) -> bool {
         self.trace.undo_trace()
+    }
+
+    pub fn plant_mine(&mut self) {
+        self.trace.plant_mine();
     }
 
     pub fn get_possible_paths(&self) -> impl Iterator<Item = Vec<Coordinate>> + use<'_> {
