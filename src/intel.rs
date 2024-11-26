@@ -32,7 +32,7 @@ impl Display for InformationPiece {
         match self {
             Self::Quadrant(q) => write!(f, "{}", q),
             Self::Column(c) => write!(f, "{}", char::from_u32('a' as u32 + c).unwrap()),
-            Self::Row(r) => write!(f, "{}", r),
+            Self::Row(r) => write!(f, "{}", r + 1),
         }
     }
 }

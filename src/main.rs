@@ -96,33 +96,51 @@ impl Display for PickTruthLieKind {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum PickTruthLieProgress {
     None,
-    Info1Kind(PickTruthLieKind),
+    Info1Kind {
+        kind: PickTruthLieKind,
+        data: String,
+    },
     Info1Information(InformationPiece),
     Info2Kind {
         info1: InformationPiece,
         kind: PickTruthLieKind,
+        data: String,
     },
 }
 
 impl PickTruthLieProgress {
-    const fn previous(&self) -> Option<Self> {
+    fn previous(&self) -> Option<Self> {
         Some(match self {
             Self::None => return None,
-            Self::Info1Kind(_) => Self::None,
-            Self::Info1Information(piece) => Self::Info1Kind(match piece {
-                InformationPiece::Quadrant(_) => PickTruthLieKind::Quadrant,
-                InformationPiece::Row(_) => PickTruthLieKind::Row,
-                InformationPiece::Column(_) => PickTruthLieKind::Column,
-            }),
-            Self::Info2Kind { info1, .. } => Self::Info1Information(*info1),
+            Self::Info1Kind { kind: _, data } if data.is_empty() => Self::None,
+            Self::Info1Kind { kind, data } => Self::Info1Kind {
+                kind: *kind,
+                data: data[..data.len() - 1].to_string(),
+            },
+            Self::Info1Information(piece) => Self::Info1Kind {
+                kind: match piece {
+                    InformationPiece::Quadrant(_) => PickTruthLieKind::Quadrant,
+                    InformationPiece::Row(_) => PickTruthLieKind::Row,
+                    InformationPiece::Column(_) => PickTruthLieKind::Column,
+                },
+                data: String::new(),
+            },
+            Self::Info2Kind { info1, data, .. } if data.is_empty() => {
+                Self::Info1Information(*info1)
+            }
+            Self::Info2Kind { info1, kind, data } => Self::Info2Kind {
+                info1: *info1,
+                kind: *kind,
+                data: data[..data.len() - 1].to_string(),
+            },
         })
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum Submenu {
     IntelPickQuadrant { quadrant: Option<Quadrant> },
     IntelPickTruthLie(PickTruthLieProgress),
@@ -213,7 +231,7 @@ impl App {
                 KeyCode::Backspace => {
                     if app.error.is_some() {
                         app.error = None;
-                    } else if let Some(submenu) = app.submenu {
+                    } else if let Some(submenu) = &app.submenu {
                         app.submenu = submenu.previous();
                     } else {
                         return false;
@@ -253,7 +271,7 @@ impl App {
                 PickTruthLieKind::Quadrant => {
                     read_quadrant(key_event).map(InformationPiece::Quadrant)
                 }
-                PickTruthLieKind::Row => todo!(),
+                PickTruthLieKind::Row => panic!("Row should not be handled here"),
                 PickTruthLieKind::Column => match key_event.code {
                     KeyCode::Char(c) => {
                         // make sure we don't undeflow
@@ -271,11 +289,18 @@ impl App {
             }
         }
 
+        const fn read_digit(key_event: KeyEvent) -> Option<char> {
+            match key_event.code {
+                KeyCode::Char(c @ '0'..='9') => Some(c),
+                _ => None,
+            }
+        }
+
         if base_handling(self, key_event) {
             return;
         }
 
-        match self.submenu {
+        match &self.submenu {
             None => match key_event.code {
                 KeyCode::Backspace => {
                     self.radar.undo_trace();
@@ -339,7 +364,7 @@ impl App {
                     quadrant: read_quadrant(key_event),
                 });
             }
-            Some(Submenu::IntelPickQuadrant {
+            &Some(Submenu::IntelPickQuadrant {
                 quadrant: Some(quadrant),
             }) => {
                 let answer = match key_event.code {
@@ -357,25 +382,87 @@ impl App {
                 PickTruthLieProgress::None => {
                     if let Some(kind) = read_truth_lie_kind(key_event) {
                         self.submenu = Some(Submenu::IntelPickTruthLie(
-                            PickTruthLieProgress::Info1Kind(kind),
+                            PickTruthLieProgress::Info1Kind {
+                                kind,
+                                data: String::new(),
+                            },
                         ));
                     }
                 }
-                PickTruthLieProgress::Info1Kind(kind) => {
+                PickTruthLieProgress::Info1Kind {
+                    kind: PickTruthLieKind::Row,
+                    data,
+                } => {
+                    if key_event.code == KeyCode::Enter {
+                        if let Ok(row) = data.parse::<u32>() {
+                            if row <= self.radar.map().size() {
+                                let info1 = InformationPiece::Row(row - 1);
+                                self.submenu = Some(Submenu::IntelPickTruthLie(
+                                    PickTruthLieProgress::Info1Information(info1),
+                                ));
+                            }
+                        }
+                    } else if let Some(d) = read_digit(key_event) {
+                        let data = data.to_owned() + &d.to_string();
+                        self.submenu = Some(Submenu::IntelPickTruthLie(
+                            PickTruthLieProgress::Info1Kind {
+                                kind: PickTruthLieKind::Row,
+                                data,
+                            },
+                        ));
+                    }
+                }
+                &PickTruthLieProgress::Info1Kind { kind, data: _ } => {
                     if let Some(info) = read_information_piece(self, key_event, kind) {
                         self.submenu = Some(Submenu::IntelPickTruthLie(
                             PickTruthLieProgress::Info1Information(info),
                         ));
                     }
                 }
-                PickTruthLieProgress::Info1Information(info1) => {
+                &PickTruthLieProgress::Info1Information(info1) => {
                     if let Some(kind) = read_truth_lie_kind(key_event) {
                         self.submenu = Some(Submenu::IntelPickTruthLie(
-                            PickTruthLieProgress::Info2Kind { info1, kind },
+                            PickTruthLieProgress::Info2Kind {
+                                info1,
+                                kind,
+                                data: String::new(),
+                            },
                         ));
                     }
                 }
-                PickTruthLieProgress::Info2Kind { info1, kind } => {
+                PickTruthLieProgress::Info2Kind {
+                    info1,
+                    kind: kind @ PickTruthLieKind::Row,
+                    data,
+                } => {
+                    if key_event.code == KeyCode::Enter {
+                        if let Ok(row) = data.parse::<u32>() {
+                            if row <= self.radar.map().size() {
+                                let info2 = InformationPiece::Row(row - 1);
+                                self.radar.add_intel(IntelQuestion::TruthLie {
+                                    info1: *info1,
+                                    info2,
+                                });
+                                self.submenu = None;
+                                self.update_possible_paths();
+                            }
+                        }
+                    } else if let Some(d) = read_digit(key_event) {
+                        let data = data.to_owned() + &d.to_string();
+                        self.submenu = Some(Submenu::IntelPickTruthLie(
+                            PickTruthLieProgress::Info2Kind {
+                                info1: *info1,
+                                kind: *kind,
+                                data,
+                            },
+                        ));
+                    }
+                }
+                &PickTruthLieProgress::Info2Kind {
+                    info1,
+                    kind,
+                    data: _,
+                } => {
                     if let Some(info2) = read_information_piece(self, key_event, kind) {
                         self.radar
                             .add_intel(IntelQuestion::TruthLie { info1, info2 });
@@ -413,7 +500,7 @@ s - collect truth/lie intel (sonar)
         if let Some(error) = &self.error {
             let text = Text::from(error.to_string() + &instructions);
             text.render(area, buf);
-        } else if let Some(submenu) = self.submenu {
+        } else if let Some(submenu) = &self.submenu {
             match submenu {
                 Submenu::IntelPickQuadrant { quadrant: None } => {
                     let text = Text::from(
@@ -434,7 +521,10 @@ s - collect truth/lie intel (sonar)
                     let kind_instruction = "q - quadrant, r - row, c - column";
                     let info_instruction = |kind| match kind {
                         PickTruthLieKind::Quadrant => "1, 2, 3, 4".to_string(),
-                        PickTruthLieKind::Row => todo!(),
+                        PickTruthLieKind::Row => (1..=self.radar.map().size())
+                            .map(|n| n.to_string())
+                            .collect::<Vec<_>>()
+                            .join(", "),
                         PickTruthLieKind::Column => ('a'..='z')
                             .take(self.radar.map().size() as usize)
                             .map(String::from)
@@ -445,26 +535,35 @@ s - collect truth/lie intel (sonar)
                     let text = Text::from(
                         match progress {
                             PickTruthLieProgress::None => {
-                                format!("Pick info 1 kind ({})", kind_instruction)
+                                format!("Pick info 1 kind ({kind_instruction})")
                             }
-                            PickTruthLieProgress::Info1Kind(kind) => {
-                                format!("Info 1 about {} ({})", kind, info_instruction(kind))
-                            }
-                            PickTruthLieProgress::Info1Information(piece) => {
+                            PickTruthLieProgress::Info1Kind { kind, data } => {
                                 format!(
-                                    "Info 1 about {} is that it is {}.\nPick info 2 kind ({})",
-                                    PickTruthLieKind::from(piece),
-                                    piece,
-                                    kind_instruction
+                                    "Info 1 about {kind} ({}){}",
+                                    info_instruction(*kind),
+                                    if data.is_empty() {
+                                        "".to_string()
+                                    } else {
+                                        format!(" + ENTER: {data}")
+                                    }
                                 )
                             }
-                            PickTruthLieProgress::Info2Kind { info1, kind } => {
+                            &PickTruthLieProgress::Info1Information(piece) => {
                                 format!(
-                                    "Info 1 about {} is that it is {}.\nInfo 2 about {} ({})",
-                                    PickTruthLieKind::from(info1),
-                                    info1,
-                                    kind,
-                                    info_instruction(kind)
+                                    "Info 1 about {} is that it is {piece}.\nPick info 2 kind ({kind_instruction})",
+                                    PickTruthLieKind::from(piece),
+                                )
+                            }
+                            PickTruthLieProgress::Info2Kind { info1, kind, data } => {
+                                format!(
+                                    "Info 1 about {} is that it is {info1}.\nInfo 2 about {kind} ({}){}",
+                                    PickTruthLieKind::from(*info1),
+                                    info_instruction(*kind),
+                                    if data.is_empty() {
+                                        "".to_string()
+                                    } else {
+                                        format!(" + ENTER: {data}")
+                                    }
                                 )
                             }
                         } + "\n"
