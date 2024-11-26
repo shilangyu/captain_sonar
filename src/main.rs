@@ -9,9 +9,14 @@ use std::{collections::HashSet, fmt::Display, io};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{buffer::Buffer, layout::Rect, text::Text, widgets::Widget, DefaultTerminal, Frame};
 
-fn radar_to_string(radar: &Radar, path: &[Coordinate]) -> String {
+fn radar_to_string(radar: &Radar, path: &[DecoratedCoordinate]) -> String {
     let mut result = String::new();
-    let path = path.iter().copied().collect::<HashSet<_>>();
+    let mines = path
+        .iter()
+        .filter_map(|c| if c.has_mine() { Some(c.coord()) } else { None })
+        .flat_map(|c| Coordinate::neighbours(&c))
+        .collect::<HashSet<_>>();
+    let path = path.iter().map(|c| c.coord()).collect::<HashSet<_>>();
 
     for y in 0..radar.map().size() {
         for x in 0..radar.map().size() {
@@ -20,6 +25,8 @@ fn radar_to_string(radar: &Radar, path: &[Coordinate]) -> String {
                 result.push('#');
             } else if path.contains(&coordinate) {
                 result.push('*');
+            } else if mines.contains(&coordinate) {
+                result.push('x');
             } else {
                 result.push('.');
             }
@@ -162,7 +169,7 @@ impl Submenu {
 pub struct App {
     exit: bool,
     radar: Radar,
-    possible_paths: Vec<Vec<Coordinate>>,
+    possible_paths: Vec<Vec<DecoratedCoordinate>>,
     show_path_index: Option<usize>,
     submenu: Option<Submenu>,
     error: Option<AppError>,
@@ -346,6 +353,10 @@ impl App {
                         .map(AppError::Move);
                     self.update_possible_paths();
                 }
+                KeyCode::Char('m') => {
+                    self.radar.plant_mine();
+                    self.update_possible_paths();
+                }
                 KeyCode::Char('q') => {
                     self.submenu = Some(Submenu::IntelPickQuadrant { quadrant: None });
                 }
@@ -491,6 +502,7 @@ ESC - quit";
 ↑ - north, → - east, ↓ - south, ← - west
 tab - next path
 d - dash
+m - plant mine
 q - collect quadrant intel (drone)
 s - collect truth/lie intel (sonar)
 {}",

@@ -10,6 +10,24 @@ pub struct Coordinate {
     y: u32,
 }
 
+impl Coordinate {
+    pub fn neighbours(&self) -> impl Iterator<Item = Self> {
+        let origin: Offset = (*self).into();
+        [
+            Offset::new(-1, -1),
+            Offset::new(0, -1),
+            Offset::new(1, -1),
+            Offset::new(-1, 0),
+            Offset::new(1, 0),
+            Offset::new(-1, 1),
+            Offset::new(0, 1),
+            Offset::new(1, 1),
+        ]
+        .into_iter()
+        .filter_map(move |o| Self::try_from(origin + o).ok())
+    }
+}
+
 impl TryFrom<Offset> for Coordinate {
     type Error = ();
 
@@ -272,6 +290,22 @@ pub struct Radar {
     trace: Trace,
 }
 
+#[derive(Debug, Clone, Copy, Hash)]
+pub struct DecoratedCoordinate {
+    coord: Coordinate,
+    has_mine: bool,
+}
+
+impl DecoratedCoordinate {
+    pub const fn coord(&self) -> Coordinate {
+        self.coord
+    }
+
+    pub const fn has_mine(&self) -> bool {
+        self.has_mine
+    }
+}
+
 impl Radar {
     pub const fn new(map: Map) -> Self {
         Self {
@@ -293,7 +327,7 @@ impl Radar {
         self.trace.plant_mine();
     }
 
-    pub fn get_possible_paths(&self) -> impl Iterator<Item = Vec<Coordinate>> + use<'_> {
+    pub fn get_possible_paths(&self) -> impl Iterator<Item = Vec<DecoratedCoordinate>> + use<'_> {
         let paths = self.trace.paths();
 
         (0..self.map.size)
@@ -356,7 +390,10 @@ impl Radar {
                                     }
                                 }
 
-                                Some(coord)
+                                Some(DecoratedCoordinate {
+                                    coord,
+                                    has_mine: p.has_mine,
+                                })
                             })
                             .collect()
                     })
