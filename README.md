@@ -2,7 +2,7 @@
 
 Digital helper for the captain sonar board game.
 
-- Radar: tracking possible opponent positions (TODO: tracking mines)
+- Radar: tracking possible opponent positions
 - Navigation: suggests moves that are least revealing (TODO)
 - Intel: suggests best questions to ask (TODO)
 - Attack: suggests best attacks (TODO)
