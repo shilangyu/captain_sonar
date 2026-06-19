@@ -1,6 +1,6 @@
 # Captain Sonar digital helper
 
-Digital helper for the captain sonar board game.
+Digital helper for the [captain sonar](https://en.wikipedia.org/wiki/Captain_Sonar) board game.
 
 - Radar: tracking possible opponent positions
 - Navigation: suggests moves that are least revealing (TODO)
