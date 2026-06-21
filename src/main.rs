@@ -485,7 +485,7 @@ impl App {
         }
     }
 
-    fn exit(&mut self) {
+    const fn exit(&mut self) {
         self.exit = true;
     }
 }
